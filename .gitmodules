@@ -22,3 +22,6 @@
 [submodule "src/navigation_tutorials"]
 	path = src/navigation_tutorials
 	url = https://github.com/ros-planning/navigation_tutorials.git
+[submodule "src/turtlebot3_simulations"]
+	path = src/turtlebot3_simulations
+	url = https://github.com/ROBOTIS-GIT/turtlebot3_simulations.git
