@@ -13,3 +13,12 @@
 [submodule "m-explore"]
 	path = m-explore
 	url = https://github.com/hrnr/m-explore.git
+[submodule "src/navigation"]
+	path = src/navigation
+	url = https://github.com/ros-planning/navigation.git
+[submodule "src/m-explore"]
+	path = src/m-explore
+	url = https://github.com/hrnr/m-explore.git
+[submodule "src/navigation_tutorials"]
+	path = src/navigation_tutorials
+	url = https://github.com/ros-planning/navigation_tutorials.git
