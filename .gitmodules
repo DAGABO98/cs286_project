@@ -1,0 +1,3 @@
+[submodule "src/src/frontier_exploration"]
+	path = src/src/frontier_exploration
+	url = https://github.com/paulbovbel/frontier_exploration
