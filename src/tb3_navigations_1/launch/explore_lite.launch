@@ -1,0 +1,79 @@
+<launch>
+  <arg name="model" default="$(env TURTLEBOT3_MODEL)" doc="model type [burger, waffle, waffle_pi]"/>
+  <arg name="slam_methods" default="gmapping" doc="slam type [gmapping, cartographer, hector, karto]"/>
+  <arg name="configuration_basename" default="turtlebot3_lds_2d.lua"/>
+  <arg name="multi_robot_name" default="tb3"/>
+  <arg name="move_forward_only" default="false"/>
+  <arg name="open_rviz" default="true"/>
+
+  <group ns="$(arg multi_robot_name)_0">
+    <!-- SLAM: Gmapping, Cartographer, Hector, Karto, -->
+    <include file="$(find turtlebot3_slam)/launch/turtlebot3_$(arg slam_methods).launch">
+      <arg name="model" value="$(arg model)"/>
+      <arg name="configuration_basename" value="$(arg configuration_basename)"/>
+      <arg name="set_base_frame" value="$(arg multi_robot_name)_0/base_footprint"/>
+      <arg name="set_odom_frame" value="$(arg multi_robot_name)_0/odom"/>
+      <arg name="set_map_frame"  value="$(arg multi_robot_name)_0/map"/>
+    </include>
+
+    <!-- Move_base -->
+    <include file="$(find tb3_navigations)/launch/move_base_0.launch">
+      <arg name="model" value="$(arg model)" />
+      <arg name="move_forward_only" value="$(arg move_forward_only)"/>
+    </include>
+
+    <node pkg="explore_lite" type="explore" respawn="true" name="explore" output="screen">
+      <rosparam file="$(find tb3_navigations)/param/explore_lite_0.yaml" command="load" />
+    </node>
+  </group>
+
+  <group ns="$(arg multi_robot_name)_1">
+    <include file="$(find turtlebot3_slam)/launch/turtlebot3_$(arg slam_methods).launch">
+      <arg name="model" value="$(arg model)"/>
+      <arg name="configuration_basename" value="$(arg configuration_basename)"/>
+      <arg name="set_base_frame" value="$(arg multi_robot_name)_1/base_footprint"/>
+      <arg name="set_odom_frame" value="$(arg multi_robot_name)_1/odom"/>
+      <arg name="set_map_frame"  value="$(arg multi_robot_name)_1/map"/>
+    </include>
+
+    <include file="$(find tb3_navigations)/launch/move_base_1.launch">
+      <arg name="model" value="$(arg model)" />
+      <arg name="move_forward_only" value="$(arg move_forward_only)"/>
+    </include>
+
+    <node pkg="explore_lite" type="explore" respawn="true" name="explore" output="screen">
+      <rosparam file="$(find tb3_navigations)/param/explore_lite_1.yaml" command="load" />
+    </node>
+  </group>
+
+  <group ns="$(arg multi_robot_name)_2">
+    <include file="$(find turtlebot3_slam)/launch/turtlebot3_$(arg slam_methods).launch">
+      <arg name="model" value="$(arg model)"/>
+      <arg name="configuration_basename" value="$(arg configuration_basename)"/>
+      <arg name="set_base_frame" value="$(arg multi_robot_name)_2/base_footprint"/>
+      <arg name="set_odom_frame" value="$(arg multi_robot_name)_2/odom"/>
+      <arg name="set_map_frame"  value="$(arg multi_robot_name)_2/map"/>
+    </include>
+
+    <include file="$(find tb3_navigations)/launch/move_base_2.launch">
+      <arg name="model" value="$(arg model)" />
+      <arg name="move_forward_only" value="$(arg move_forward_only)"/>
+    </include>
+
+    <node pkg="explore_lite" type="explore" respawn="true" name="explore" output="screen">
+      <rosparam file="$(find tb3_navigations)/param/explore_lite_2.yaml" command="load" />
+    </node>
+  </group>
+
+  <group>
+    <include file="$(find turtlebot3_gazebo)/launch/multi_map_merge.launch"/>
+
+    <!-- rviz -->
+    <group if="$(arg open_rviz)"> 
+      <node pkg="rviz" type="rviz" name="rviz" required="true"
+            args="-d $(find turtlebot3_gazebo)/rviz/multi_turtlebot3_slam.rviz"/>
+    </group>
+  </group>
+
+
+</launch>
