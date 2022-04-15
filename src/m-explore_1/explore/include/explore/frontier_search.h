@@ -2,6 +2,7 @@
 #define FRONTIER_SEARCH_H_
 
 #include <costmap_2d/costmap_2d.h>
+#include <geometry_msgs/Quaternion.h>
 
 namespace frontier_exploration
 {
@@ -42,7 +43,7 @@ public:
    * @param position Initial position to search from
    * @return List of frontiers, if any
    */
-  std::vector<Frontier> searchFrom(geometry_msgs::Point position);
+  std::vector<Frontier> searchFrom(geometry_msgs::Point position, geometry_msgs::Quaternion orientation);
 
 protected:
   /**
