@@ -5,6 +5,13 @@
 #include <costmap_2d/cost_values.h>
 #include <costmap_2d/costmap_2d.h>
 #include <geometry_msgs/Point.h>
+#include <geometry_msgs/Quaternion.h>
+#include <std_msgs/Float32.h>
+#include <ros/ros.h>
+#include <tf/transform_datatypes.h>
+#include <math.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+
 
 #include <explore/costmap_tools.h>
 
@@ -24,7 +31,7 @@ FrontierSearch::FrontierSearch(costmap_2d::Costmap2D* costmap,
 {
 }
 
-std::vector<Frontier> FrontierSearch::searchFrom(geometry_msgs::Point position)
+std::vector<Frontier> FrontierSearch::searchFrom(geometry_msgs::Point position, geometry_msgs::Quaternion orientation)
 {
   std::vector<Frontier> frontier_list;
 
@@ -84,8 +91,24 @@ std::vector<Frontier> FrontierSearch::searchFrom(geometry_msgs::Point position)
   }
 
   // set costs of frontiers
+  tf::Quaternion q(orientation.x, orientation.y, orientation.z, orientation.w);
+  tf::Matrix3x3 m(q);
+  double roll, pitch, yaw;
+  m.getRPY(roll, pitch, yaw);
+  ros::NodeHandle aoa_nh_;
+  std::string aoa_topic = "aoa_topic";
+  auto aoa_msg = ros::topic::waitForMessage<std_msgs::Float32>(aoa_topic, aoa_nh_);
+  float aoa_angle = aoa_msg->data;
+  aoa_angle = aoa_angle * 3.14159 / 180;
+  ROS_DEBUG("Angle of Arrival is %f", aoa_angle);
   for (auto& frontier : frontier_list) {
-    frontier.cost = frontierCost(frontier);
+    // gamma is the angle of the line connecting the frontier centroid to robot
+    // theta is the orientation
+    // beta is the aoa
+    double gamma = atan2((frontier.centroid.y - position.y), (frontier.centroid.x - position.x));
+    double similarity = cos((gamma - yaw) - aoa_angle);
+
+    frontier.cost = frontierCost(frontier) - similarity * 20;
   }
   std::sort(
       frontier_list.begin(), frontier_list.end(),
@@ -190,6 +213,7 @@ bool FrontierSearch::isNewFrontierCell(unsigned int idx,
 
 double FrontierSearch::frontierCost(const Frontier& frontier)
 {
+
   return (potential_scale_ * frontier.min_distance *
           costmap_->getResolution()) -
          (gain_scale_ * frontier.size * costmap_->getResolution());
