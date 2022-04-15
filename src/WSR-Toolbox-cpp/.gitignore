@@ -1,0 +1,14 @@
+*.vscode
+cmake-build-debug/
+*.idea
+*.pyc*
+*__pycache__*
+*.so
+*build
+Cython_example
+*.so
+Cython_modules/wsr_module.cpp
+*__init__*
+wsr_build
+cmake-build-release/
+
