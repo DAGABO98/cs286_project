@@ -17,12 +17,13 @@ import time
 import array
 import struct
 import sys
+import getopt
 import re
 
 class UWB_meas:
 
 
-    def __init__(self, my_dev):
+    def __init__(self, my_dev=""):
 
         # Define initial variables
         self.my_dev = my_dev
@@ -104,13 +105,13 @@ class UWB_meas:
             self.connected=0
             self.connect_UWB()
 
-def publish_dist(sensor):
+def publish_dist(sensor, name_space):
 
-    pub = rospy.Publisher('distance_multi', Float64MultiArray, queue_size=10)
+    pub = rospy.Publisher(name_space+'distance_multi', Float64MultiArray, queue_size=10)
     rospy.init_node('uwb', anonymous=True)
     my_msg = Float64MultiArray()  
 
-    rate = rospy.Rate(5) # 5hz
+    rate = rospy.Rate(10) # 5hz
     while not rospy.is_shutdown():
         # Get measurement from sensor
         sensor.get_dist()
@@ -127,11 +128,34 @@ def publish_dist(sensor):
 if __name__ == '__main__':
 
     # Initialize UWB sensor
-    sensor=UWB_meas(my_dev='/dev/ttyACM1')
+    sensor_num = ''
+    name_space = ''
+    try:
+        opts, args = getopt.getopt(sys.argv[1:], "hs:n:", ["sensor_num=", "name_space="])
+    except:
+        print("uwb_pub_multi.py -s <sensor_num> -n <name_space>")
+        sys.exit(2)
+
+    for opt, arg in  opts:
+        if opt == "-h":
+            print("uwb_pub_multi.py -s <sensor_num> -n <name_space>")
+            sys.exit()
+        elif opt in ("-s", "--sensor_num"):
+            sensor_num = arg
+        elif opt in ("-n", "--name_space"):
+            name_space = arg
+        else:
+            print("Incorrect argument")
+            print("uwb_pub_multi.py -s <sensor_num> -n <name_space>")
+            sys.exit(2)
+
+
+
+    sensor=UWB_meas(my_dev='/dev/ttyACM'+sensor_num)
     print("Start")
     
     # Publish sensor data
     try:
-        publish_dist(sensor)
+        publish_dist(sensor, name_space)
     except rospy.ROSInterruptException:
         pass        

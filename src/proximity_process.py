@@ -8,6 +8,7 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Point, Quaternion
 import random
 import sys
+import copy
 import numpy as np
 
 
@@ -22,23 +23,23 @@ class QuadraticCost:
     '''
     def __init__(self):
         # initial state and solution that evolves with time
-        self.x = np.array((0, 0))
+        self.x = np.array((-1.0, -1.0))
 
-    def step(self, dList, pList):
-        n = 0
-        gradient = 0
+    def step(self, pList, dList):
+        n = 0.0
+        gradient = np.array((0.0, 0.0))
+        
         for (p, d) in zip(pList, dList):
             if d > 0:
                 xp = np.linalg.norm(p - self.x)
                 gradient += (self.x - p) * (1 - d / xp)
                 n += 1
-        
-        self.x -= 1 / (10 * n) * (gradient) # update x
+        self.x -= (1 / (10 * n)) * (gradient) # update x
         return
 
 
 class AOA_Processor:
-    def __init__(self, name_space1="tb3_1/", name_space2="tb3_4"):
+    def __init__(self, name_space1="tb3_1/", name_space2="tb3_4/"):
 
         rospy.Subscriber(str(name_space1)+'odom', Odometry, self.odom_cb1)
         rospy.Subscriber(str(name_space2)+'odom', Odometry, self.odom_cb2)
@@ -52,17 +53,17 @@ class AOA_Processor:
         self.start_position1 = [0.0, 0.0]
         self.start_position2 = [1.0, 0.0]
 
-        self.postions1 = [ (0.0, 0.0) for i in range(300)]
+        self.positions1 = [ (0.0, 0.0) for i in range(50)]
         self.positions_index1 = 0
-        self.positions2 = [ (0.0, 0.0) for i in range(300)]
+        self.positions2 = [ (1.0, 0.0) for i in range(50)]
         self.positions_index2 = 0
 
         self.current_ori1 = 0.0
         self.current_ori2 = 0.0
 
-        self.distances_to_target1 = [-10.0 for i in range(300)]
+        self.distances_to_target1 = [-10.0 for i in range(50)]
         self.distance_index1 = 0
-        self.distances_to_target2 = [-10.0 for i in range(300)]
+        self.distances_to_target2 = [-10.0 for i in range(50)]
         self.distance_index2 = 0
 
         self.aoa_direction1 = 0.0
@@ -73,33 +74,33 @@ class AOA_Processor:
 
     def odom_cb1(self,msg):
         positions1 = msg.pose.pose.position
-        self.positions1[self.positions_index1] = (positions1.x + self.start_position1[0], positions1.y + self.start_position2[1])
-        self.positions_index1  = (self.positions_index1 + 1) % 300
+        self.positions1[self.positions_index1] = (positions1.x + self.start_position1[0], positions1.y + self.start_position1[1])
+        self.positions_index1  = (self.positions_index1 + 1) % 50
         self.current_ori1 = euler_from_quaternion([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])[2]
 
     def odom_cb2(self,msg):
         positions2 = msg.pose.pose.position
-        self.positions2[self.positions_index2] = (positions2.x, positions2.y)
-        self.positions_index2  = (self.positions_index2 + 1) % 300
+        self.positions2[self.positions_index2] = (positions2.x + self.start_position2[0], positions2.y + self.start_position2[1])
+        self.positions_index2  = (self.positions_index2 + 1) % 50
         self.current_ori2 = euler_from_quaternion([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])[2]
 
     def dist1_cb(self,msg):
         distances = []
         for tx in msg.data:
             distances.append(tx)
-        diatnce_to_target = distances[-1]
+        distance_to_target = distances[-1]
 
         self.distances_to_target1[self.distance_index1] = distance_to_target
-        self.distance_index1 = (self.distance_index1 + 1) % 300
+        self.distance_index1 = (self.distance_index1 + 1) % 50
 
     def dist2_cb(self,msg):
         distances = []
         for tx in msg.data:
             distances.append(tx)
-        diatnce_to_target = distances[-1]
+        distance_to_target = distances[-1]
 
         self.distances_to_target2[self.distance_index2] = distance_to_target
-        self.distance_index2 = (self.distance_index2 + 1) % 300
+        self.distance_index2 = (self.distance_index2 + 1) % 50
 
 
 
@@ -111,9 +112,9 @@ class AOA_Processor:
 
         while not rospy.is_shutdown():
             rate.sleep()
-            target = self.target_optim(iterations=300)
-            self.aoa_direction1 = np.arctan2(target[0] - self.positions1[self.positions_index1-1][0], target[1] - self.positions1[self.positions_index1-1][1])
-            self.aoa_direction2 =  np.arctan2(target[0] - self.positions2[self.positions_index2-1][0], target[1] - self.positions2[self.positions_index1-1][1])
+            target = self.target_optim(iterations=100)
+            self.aoa_direction1 = np.arctan2(target[1] - self.positions1[self.positions_index1-1][1], target[0] - self.positions1[self.positions_index1-1][0]) * 180/np.pi
+            self.aoa_direction2 = np.arctan2(target[1] - self.positions2[self.positions_index2-1][1], target[0] - self.positions2[self.positions_index2-1][0]) * 180/np.pi
             self.aoa_direction1 -= self.current_ori1
             self.aoa_direction2 -= self.current_ori2
             rospy.loginfo("AOA move direction 1: " + str(self.aoa_direction1))
@@ -123,15 +124,19 @@ class AOA_Processor:
             pub2.publish(self.aoa_direction2)
 
     def target_optim(self, iterations=1000):
+        positions1 = copy.deepcopy(self.positions1)
+        positions2 = copy.deepcopy(self.positions2)
+        distances_to_target1 = copy.deepcopy(self.distances_to_target1)
+        distances_to_target2 = copy.deepcopy(self.distances_to_target2)
         for _ in range(iterations):
-            self.cost_function1.step()
-            self.cost_function2.step()
+            self.cost_function1.step(positions1, distances_to_target1)
+            self.cost_function2.step(positions2, distances_to_target2)
             t1 = 0.9 * self.cost_function1.x + 0.1 * self.cost_function2.x
             t2 = 0.1 * self.cost_function1.x + 0.9 * self.cost_function2.x
             self.cost_function1.x = t1
             self.cost_function2.x = t2
         
-        return self.cost_function1.x
+        return 0.5*self.cost_function1.x + 0.5*self.cost_function2.x
             
 
 if __name__=='__main__':
