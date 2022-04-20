@@ -1,0 +1,99 @@
+<launch>
+
+  <arg name="robot_name" default="tb3"/>
+  <arg name="lidar_frame_id" default="base_scan"/>
+  <arg name="use_zed"         default="false"  doc="Set to false when using Intel Realsense D435"/>
+  <arg name="localization"    default="false" doc="Localization mode for navigation"/>
+  <arg name="database_path"   default="rtabmap.db"/>
+  <arg name="rviz"            default="false"/>
+  <arg name="rate"            default="2.0"/>
+  <arg name="use_rtabmap"     default="true"/>
+  <arg     if="$(arg localization)" name="rtabmap_args"  default=""/>
+  <arg unless="$(arg localization)" name="rtabmap_args"  default="--delete_db_on_start"/>
+  <arg name="input_scan"       default="/$(arg robot_name)/scan_filtered"/>
+  <arg name="input_odom"       default="/$(arg robot_name)/odom"/>
+  <arg     if="$(arg use_zed)" name="input_image"        default="/$(arg robot_name)/stereo_camera/left/image_rect_color"/>
+  <arg unless="$(arg use_zed)" name="input_image"        default="/$(arg robot_name)/camera/color/image_raw"/>
+  <arg     if="$(arg use_zed)" name="input_depth"        default="/$(arg robot_name)/stereo_camera/depth/depth_registered"/>
+  <arg unless="$(arg use_zed)" name="input_depth"        default="/$(arg robot_name)/camera/aligned_depth_to_color/image_raw"/>
+  <arg     if="$(arg use_zed)" name="input_camera_info"  default="/$(arg robot_name)/stereo_camera/left/camera_info"/>
+  <arg unless="$(arg use_zed)" name="input_camera_info"  default="/$(arg robot_name)/camera/color/camera_info"/>
+
+
+  <include file="$(find turtlebot3_bringup)/launch/turtlebot3_robot.launch" ns="$(arg robot_name)">
+      <arg name="multi_robot_name" value="$(arg robot_name)"/>
+      <arg name="set_lidar_frame_id" value="$(arg robot_name)/base_scan"/>
+  </include>
+
+
+  <include file="$(find realsense2_camera)/launch/rs_camera.launch" ns="$(arg robot_name)">
+    <arg name="tf_prefix"   value="$(arg robot_name)/camera"/>
+    <arg name="align_depth" value="true"/>
+  </include>
+  
+  <include file="$(find turtlebot3_bringup)/launch/turtlebot3_remote.launch" ns="$(arg robot_name)">
+     <arg name="multi_robot_name" value="$(arg robot_name)"/> 
+  </include>
+
+  <group ns="$(arg robot_name)">
+      <node pkg="laser_filters" type="scan_to_scan_filter_chain" name="laser_filter">
+	    <rosparam command="load" file="$(find cs_286_turtlebot3)/my_laser_filter.yaml"/>
+      </node>
+
+    <node if="$(arg use_rtabmap)" name="rtabmap" pkg="rtabmap_ros" type="rtabmap" output="screen" args="$(arg rtabmap_args)">
+      <param name="database_path"       type="string" value="$(arg database_path)"/>
+      <param name="frame_id"            type="string" value="$(arg robot_name)/base_link"/>
+      <param name="map_frame_id"        type="string" value="$(arg robot_name)/map"/>
+      <param name="subscribe_depth"     type="bool"   value="true"/>
+      <param name="subscribe_scan"      type="bool"   value="true"/>
+
+      <!-- Input topics -->
+      <remap from="scan"                to="$(arg input_scan)"/>
+      <remap from="odom"                to="$(arg input_odom)"/>
+      <remap from="rgb/image"           to="$(arg input_image)"/>
+      <remap from="depth/image"         to="$(arg input_depth)"/>
+      <remap from="rgb/camera_info"     to="$(arg input_camera_info)"/>
+      <param name="approx_sync"      type="bool"   value="true"/>
+      
+      <!-- Output topics -->
+      <remap from="grid_map" to="/$(arg robot_name)/map"/>
+
+      <param name="queue_size" type="int" value="100"/>
+
+      <!-- RTAB-Map's parameters -->
+      <param name="RGBD/NeighborLinkRefining" type="string" value="true"/>
+      <param name="RGBD/ProximityBySpace"     type="string" value="true"/>
+      <param name="RGBD/OptimizeFromGraphEnd" type="string" value="false"/>
+      <param name="RGBD/AngularUpdate"        type="string" value="0.05"/>
+      <param name="RGBD/LinearUpdate"         type="string" value="0.05"/>
+      <param name="Optimizer/Slam2D"          type="string" value="true"/>
+      <param name="Reg/Force3DoF"             type="string" value="true"/>
+      <param name="Reg/Strategy"              type="string" value="1"/> <!-- 1=ICP -->
+      <param name="Vis/MinInliers"            type="string" value="5"/>
+      <param name="Vis/InlierDistance"        type="string" value="0.1"/>
+      <param name="Kp/MaxDepth"               type="string" value="1.75"/>
+      <param name="Vis/MaxDepth"              type="string" value="1.75"/>
+      <param name="Rtabmap/TimeThr"           type="string" value="700"/>
+      <param name="Rtabmap/DetectionRate"     type="string" value="$(arg rate)" />
+      <param name="Mem/RehearsalSimilarity"   type="string" value="0.45"/>
+      <param name="Grid/MaxObstacleHeight"    type="string" value="1.7" />
+      <param name="Grid/NoiseFilteringRadius" type="string" value="0.05"/>
+      <param name="Grid/NoiseFilteringMinNeighbors" type="string" value="5"/>
+
+      <!-- Localization mode -->
+      <param     if="$(arg localization)" name="Mem/IncrementalMemory" type="string" value="false"/>
+      <param unless="$(arg localization)" name="Mem/IncrementalMemory" type="string" value="true"/>
+      <param name="Mem/InitWMWithAllNodes" type="string" value="$(arg localization)"/>
+      <remap from="scan"                          to="/$(arg robot_name)/scan"/>
+      <remap from="initialpose"                   to="/$(arg robot_name)/initialpose"/>
+      <remap from="goal_out"                      to="/$(arg robot_name)/move_base_simple/goal"/>
+    </node>
+
+  </group>
+
+    <include file="$(find cs_286_turtlebot3)/launch/move_base_1.launch" ns="$(arg robot_name)">
+      <arg name="model" value="waffle"/>
+      <arg name="robot_name" value="$(arg robot_name)"/>
+    </include>
+
+</launch>
