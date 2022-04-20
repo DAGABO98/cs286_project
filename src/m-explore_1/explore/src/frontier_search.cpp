@@ -99,6 +99,10 @@ std::vector<Frontier> FrontierSearch::searchFrom(geometry_msgs::Point position, 
   std::string aoa_topic = "aoa_topic";
   auto aoa_msg = ros::topic::waitForMessage<std_msgs::Float32>(aoa_topic, aoa_nh_);
   float aoa_angle = aoa_msg->data;
+  if (aoa_angle > 800) {
+  	std::vector<Frontier> frontier_list1;
+	return frontier_list1;
+  }
   aoa_angle = aoa_angle * 3.14159 / 180;
   ROS_DEBUG("Angle of Arrival is %f", aoa_angle);
   for (auto& frontier : frontier_list) {
@@ -107,6 +111,8 @@ std::vector<Frontier> FrontierSearch::searchFrom(geometry_msgs::Point position, 
     // beta is the aoa
     double gamma = atan2((frontier.centroid.y - position.y), (frontier.centroid.x - position.x));
     double similarity = cos((gamma - yaw) - aoa_angle);
+
+    ROS_DEBUG("Similarity is %lf", similarity);
 
     frontier.cost = frontierCost(frontier) - similarity * 20;
   }
