@@ -48,7 +48,18 @@ class RobotSLAM_Nav:
         #Initialize the variable for the goal
         self.goal = MoveBaseGoal()
         self.goal.target_pose.header.frame_id = str(name_space)+"map"
+        rospy.Subscriber(str(name_space)+'odom', Odometry, self.odom_cb)
 	self.timeout = 60
+        self.current_position = Point()
+        self.current_ori = Quaternion()
+        self.step_size = 0.6
+
+    def odom_cb(self,msg):
+        self.current_position = msg.pose.pose.position
+        self.current_ori = (msg.pose.pose.orientation.x,
+                            msg.pose.pose.orientation.y,
+                            msg.pose.pose.orientation.z,
+                            msg.pose.pose.orientation.w)
 
     def move(self, target, orientation):
         self.goal.target_pose.header.stamp = rospy.Time.now()
@@ -62,6 +73,32 @@ class RobotSLAM_Nav:
         self.goal.target_pose.pose.orientation.z = q[2]
         self.goal.target_pose.pose.orientation.w = q[3]
             
+        rospy.loginfo("Attempting to move to the goal")
+        self.client.send_goal(self.goal)
+        wait=self.client.wait_for_result(rospy.Duration(self.timeout))
+
+        if not wait:
+            rospy.loginfo("Timed-out after failing to reach the goal.")
+            self.client.cancel_goal()
+            rospy.loginfo("Please provide a new goal position")
+        else:
+            rospy.loginfo("Reached goal successfully")
+
+    def move_towards_target(self, move_direction):
+        x = self.current_position.x + self.step_size*math.cos(move_direction)
+        y = self.current_position.y + self.step_size*math.sin(move_direction)
+
+        print("Moving to next location x = ",x, ", y =",y)
+                
+        self.goal.target_pose.header.stamp = rospy.Time.now()
+        self.goal.target_pose.pose.position.x = x
+        self.goal.target_pose.pose.position.y = y
+
+        self.goal.target_pose.pose.orientation.x = self.current_ori[0]
+        self.goal.target_pose.pose.orientation.y = self.current_ori[1]
+        self.goal.target_pose.pose.orientation.z = self.current_ori[2]
+        self.goal.target_pose.pose.orientation.w = self.current_ori[3]
+                
         rospy.loginfo("Attempting to move to the goal")
         self.client.send_goal(self.goal)
         wait=self.client.wait_for_result(rospy.Duration(self.timeout))
@@ -107,6 +144,8 @@ class AOA_Processor:
 
         self.aoa_direction1 = 0.0
         self.aoa_direction2 = 0.0
+        self.move_direction1 = 0.0
+        self.move_direction2 = 0.0
 
         self.within_threshold1 = False
         self.within_threshold2 = False
@@ -172,7 +211,7 @@ class AOA_Processor:
                     continue
                 else:
                     target = [self.target[0]-self.init_position1[0], self.target[1]-self.init_position1[1]]
-                    move_robot.move(target, self.current_ori1)
+                    move_robot.move_towards_target(self.move_direction1)
 
     def within_threshold2_cb(self, msg):
         if msg.data == 1000.0:
@@ -182,7 +221,7 @@ class AOA_Processor:
                     continue
                 else:
                     target = [self.target[0]-self.init_position2[0], self.target[1]-self.init_position2[1]]
-                    move_robot.move(target, self.current_ori2)
+                    move_robot.move_towards_target(self.move_direction2)
 
     def publish_aoa(self):
         pub1 = rospy.Publisher(str(self.name_space1)+"aoa_topic", Float32, queue_size=10)
@@ -199,6 +238,8 @@ class AOA_Processor:
                 self.aoa_direction1 = 1000.0
                 if self.first_pub1:
                     self.first_pub1 = False
+                    self.move_direction1 = np.arctan2(target[1] - self.positions1[self.positions_index1-1][1], target[0] - self.positions1[self.positions_index1-1][0]) * 180/np.pi
+                    self.move_direction1 -= self.current_ori1
                     pubt1 = rospy.Publisher(str(self.name_space1)+"within_threshold", Float32, queue_size=1)
                     pubt1.publish(self.aoa_direction1)
                 
@@ -210,6 +251,9 @@ class AOA_Processor:
                 self.aoa_direction2 = 1000.0
                 if self.first_pub2:
                     self.first_pub2 = False
+                    self.move_direction2 = np.arctan2(target[1] - self.positions2[self.positions_index2-1][1], target[0] - self.positions2[self.positions_index2-1][0]) * 1
+80/np.pi
+                    self.move_direction2 -= self.current_ori2
                     pubt2 = rospy.Publisher(str(self.name_space2)+"within_threshold", Float32, queue_size=1)
                     pubt2.publish(self.aoa_direction2)
             else:
