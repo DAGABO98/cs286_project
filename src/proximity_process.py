@@ -5,6 +5,7 @@ import math
 import actionlib
 from move_base_msgs.msg import MoveBaseAction , MoveBaseGoal
 from tf.transformations import quaternion_from_euler
+from visualization_msgs.msg import Marker
 from std_msgs.msg import Float64MultiArray
 from tf.transformations import euler_from_quaternion
 from nav_msgs.msg import Odometry
@@ -20,59 +21,48 @@ def euclideanDistance(a, b):
 
 class QuadraticCost:
     '''
-    Each robot will have a cost function. 
+    Each robot will have a cost function.
     '''
     def __init__(self):
         # initial state and solution that evolves with time
-        self.x = np.array((-1.0, -1.0))
+        self.x = np.array((2.0, -2.0))
 
-    def step(self, pList, dList):
+    def step(self, pList, dList, step_size=0.9):
         n = 0.0
         gradient = np.array((0.0, 0.0))
-        
+
         for (p, d) in zip(pList, dList):
             if d > 0:
                 xp = np.linalg.norm(p - self.x)
                 gradient += (self.x - p) * (1 - d / xp)
                 n += 1
-        self.x -= (1 / (10 * n)) * (gradient) # update x
+        self.x -= (1 / (step_size * n)) * (gradient) # update x
         return
 
 class RobotSLAM_Nav:
     def __init__(self, name_space):
-        rospy.init_node("move_base_tester")
         self.client = actionlib.SimpleActionClient(str(name_space)+"move_base", MoveBaseAction)
         #Create the actionlib server
         self.client.wait_for_server()
 
-        #Initialize the variable for the goal
+        # Initialize the variable for the goal
         self.goal = MoveBaseGoal()
         self.goal.target_pose.header.frame_id = str(name_space)+"map"
-        rospy.Subscriber(str(name_space)+'odom', Odometry, self.odom_cb)
-	self.timeout = 60
-        self.current_position = Point()
-        self.current_ori = Quaternion()
+        self.timeout = 60
         self.step_size = 0.6
-
-    def odom_cb(self,msg):
-        self.current_position = msg.pose.pose.position
-        self.current_ori = (msg.pose.pose.orientation.x,
-                            msg.pose.pose.orientation.y,
-                            msg.pose.pose.orientation.z,
-                            msg.pose.pose.orientation.w)
 
     def move(self, target, orientation):
         self.goal.target_pose.header.stamp = rospy.Time.now()
         self.goal.target_pose.pose.position.x = float(target[0])
         self.goal.target_pose.pose.position.y = float(target[1])
-            
+
         q = quaternion_from_euler(0,0, orientation)
 
         self.goal.target_pose.pose.orientation.x = q[0]
         self.goal.target_pose.pose.orientation.y = q[1]
         self.goal.target_pose.pose.orientation.z = q[2]
         self.goal.target_pose.pose.orientation.w = q[3]
-            
+
         rospy.loginfo("Attempting to move to the goal")
         self.client.send_goal(self.goal)
         wait=self.client.wait_for_result(rospy.Duration(self.timeout))
@@ -84,21 +74,25 @@ class RobotSLAM_Nav:
         else:
             rospy.loginfo("Reached goal successfully")
 
-    def move_towards_target(self, move_direction):
-        x = self.current_position.x + self.step_size*math.cos(move_direction)
-        y = self.current_position.y + self.step_size*math.sin(move_direction)
+    def cancel_target(self):
+        self.client.cancel_goal()
+
+    def move_towards_target(self, move_direction, current_ori, current_position):
+        x = current_position[0] + self.step_size*math.cos(move_direction)
+        y = current_position[1] + self.step_size*math.sin(move_direction)
 
         print("Moving to next location x = ",x, ", y =",y)
-                
+
         self.goal.target_pose.header.stamp = rospy.Time.now()
         self.goal.target_pose.pose.position.x = x
         self.goal.target_pose.pose.position.y = y
+        q = quaternion_from_euler(0,0, current_ori)
 
-        self.goal.target_pose.pose.orientation.x = self.current_ori[0]
-        self.goal.target_pose.pose.orientation.y = self.current_ori[1]
-        self.goal.target_pose.pose.orientation.z = self.current_ori[2]
-        self.goal.target_pose.pose.orientation.w = self.current_ori[3]
-                
+        self.goal.target_pose.pose.orientation.x = q[0]
+        self.goal.target_pose.pose.orientation.y = q[1]
+        self.goal.target_pose.pose.orientation.z = q[2]
+        self.goal.target_pose.pose.orientation.w = q[3]
+
         rospy.loginfo("Attempting to move to the goal")
         self.client.send_goal(self.goal)
         wait=self.client.wait_for_result(rospy.Duration(self.timeout))
@@ -112,7 +106,7 @@ class RobotSLAM_Nav:
 
 
 class AOA_Processor:
-    def __init__(self, name_space1="tb3_1/", name_space2="tb3_4/"):
+    def __init__(self, name_space1="tb3_5/", name_space2="tb3_4/"):
 
         rospy.Subscriber(str(name_space1)+'odom', Odometry, self.odom_cb1)
         rospy.Subscriber(str(name_space2)+'odom', Odometry, self.odom_cb2)
@@ -122,24 +116,24 @@ class AOA_Processor:
 
         rospy.Subscriber(str(name_space1)+"within_threshold", Float32, self.within_threshold1_cb)
         rospy.Subscriber(str(name_space2)+"within_threshold", Float32, self.within_threshold2_cb)
-        
+
         self.name_space1 = name_space1
         self.name_space2 = name_space2
 
         self.start_position1 = [0.0, 0.0]
-        self.start_position2 = [1.0, 0.0]
+        self.start_position2 = [-2.1, -2.36]
 
-        self.positions1 = [ (0.0, 0.0) for i in range(50)]
+        self.positions1 = [ (0.0, 0.0) for i in range(100)]
         self.positions_index1 = 0
-        self.positions2 = [ (1.0, 0.0) for i in range(50)]
+        self.positions2 = [ (-2.1, -2.36) for i in range(100)]
         self.positions_index2 = 0
 
         self.current_ori1 = 0.0
         self.current_ori2 = 0.0
 
-        self.distances_to_target1 = [-10.0 for i in range(50)]
+        self.distances_to_target1 = [-10.0 for i in range(100)]
         self.distance_index1 = 0
-        self.distances_to_target2 = [-10.0 for i in range(50)]
+        self.distances_to_target2 = [-10.0 for i in range(100)]
         self.distance_index2 = 0
 
         self.aoa_direction1 = 0.0
@@ -152,7 +146,10 @@ class AOA_Processor:
         self.first_pub1 = True
         self.first_pub2 = True
 
-        self.target = None
+        self.target1 = None
+        self.target2 = None
+        self.stop1 = False
+        self.stop2 = False
 
         self.cost_function1 = QuadraticCost()
         self.cost_function2 = QuadraticCost()
@@ -160,13 +157,13 @@ class AOA_Processor:
     def odom_cb1(self,msg):
         positions1 = msg.pose.pose.position
         self.positions1[self.positions_index1] = (positions1.x + self.start_position1[0], positions1.y + self.start_position1[1])
-        self.positions_index1  = (self.positions_index1 + 1) % 50
+        self.positions_index1  = (self.positions_index1 + 1) % 100
         self.current_ori1 = euler_from_quaternion([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])[2]
 
     def odom_cb2(self,msg):
         positions2 = msg.pose.pose.position
         self.positions2[self.positions_index2] = (positions2.x + self.start_position2[0], positions2.y + self.start_position2[1])
-        self.positions_index2  = (self.positions_index2 + 1) % 50
+        self.positions_index2  = (self.positions_index2 + 1) % 100
         self.current_ori2 = euler_from_quaternion([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])[2]
 
     def dist1_cb(self,msg):
@@ -175,16 +172,16 @@ class AOA_Processor:
             distances.append(tx)
         distance_to_target = distances[-1]
 
-        if distance_to_target < 0.8:
+        if distance_to_target < 1:
             self.within_threshold1 = True
 
-        if distance_to_target <= 0.35:
+        if distance_to_target <= 0.5:
             self.stop1 = True
-        else:
-            self.stop1 = False
+        # else:
+        #     self.stop1 = False
 
         self.distances_to_target1[self.distance_index1] = distance_to_target
-        self.distance_index1 = (self.distance_index1 + 1) % 50
+        self.distance_index1 = (self.distance_index1 + 1) % 100
 
     def dist2_cb(self,msg):
         distances = []
@@ -192,79 +189,130 @@ class AOA_Processor:
             distances.append(tx)
         distance_to_target = distances[-1]
 
-        if distance_to_target < 0.8:
+        if distance_to_target < 1:
             self.within_threshold2 = True
 
-        if distance_to_target <= 0.35:
+        if distance_to_target <= 0.5:
             self.stop2 = True
-        else:
-            self.stop2 = False
+        # else:
+        #     self.stop2 = False
 
         self.distances_to_target2[self.distance_index2] = distance_to_target
-        self.distance_index2 = (self.distance_index2 + 1) % 50
-    
+        self.distance_index2 = (self.distance_index2 + 1) % 100
+
     def within_threshold1_cb(self, msg):
         if msg.data == 1000.0:
             move_robot = RobotSLAM_Nav(self.name_space1)
             while True:
                 if self.stop1:
+                    move_robot.cancel_target()
                     continue
                 else:
-                    target = [self.target[0]-self.init_position1[0], self.target[1]-self.init_position1[1]]
-                    move_robot.move_towards_target(self.move_direction1)
+                    target = [self.target1.x-self.start_position1[0], self.target1.y-self.start_position1[1]]
+                    #move_robot.move_towards_target(self.move_direction1, self.current_ori1, self.positions1[-1])
+                    move_robot.move(target, 0.0)
 
     def within_threshold2_cb(self, msg):
         if msg.data == 1000.0:
             move_robot = RobotSLAM_Nav(self.name_space2)
             while True:
                 if self.stop2:
+                    move_robot.cancel_target()
                     continue
                 else:
-                    target = [self.target[0]-self.init_position2[0], self.target[1]-self.init_position2[1]]
-                    move_robot.move_towards_target(self.move_direction2)
+                    target = [self.target2.x-self.start_position2[0], self.target2.y-self.start_position2[1]]
+                    #move_robot.move_towards_target(self.move_direction2, self.current_ori2, self.positions2[-1])
+                    move_robot.move(target, 0.0)
 
     def publish_aoa(self):
         pub1 = rospy.Publisher(str(self.name_space1)+"aoa_topic", Float32, queue_size=10)
         pub2 = rospy.Publisher(str(self.name_space2)+"aoa_topic", Float32, queue_size=10)
+        pubt2 = rospy.Publisher(str(self.name_space2)+"within_threshold", Float32, queue_size=1)
+        pubt1 = rospy.Publisher(str(self.name_space1)+"within_threshold", Float32, queue_size=1)
+        pub_target1 = rospy.Publisher(str(self.name_space1) + "optimized_target_topic", Marker, queue_size=10) #move_base_simple/goal
+        pub_target2 = rospy.Publisher(str(self.name_space2)+"optimized_target_topic", Marker, queue_size=10) #optimized_target_topic
+
         rospy.init_node("aoa_processor", anonymous=True)
         rate = rospy.Rate(0.5) # 1 hz
 
         while not rospy.is_shutdown():
             rate.sleep()
-            target = self.target_optim(iterations=100)
-            self.target = target
-            
+            target = self.target_optim(iterations=500)
+            print("Optimization output = " + str(target))
+            # target = [4.31, -2.1]
+            p = Point()
+            p.x = target[0]
+            p.y = target[1]
+            p.z = 0.0
+            self.target = p
+
             if self.within_threshold1:
                 self.aoa_direction1 = 1000.0
                 if self.first_pub1:
                     self.first_pub1 = False
                     self.move_direction1 = np.arctan2(target[1] - self.positions1[self.positions_index1-1][1], target[0] - self.positions1[self.positions_index1-1][0]) * 180/np.pi
-                    self.move_direction1 -= self.current_ori1
-                    pubt1 = rospy.Publisher(str(self.name_space1)+"within_threshold", Float32, queue_size=1)
+                    self.move_direction1 -= self.current_ori1 * 180 / np.pi
                     pubt1.publish(self.aoa_direction1)
-                
+
             else:
                 self.aoa_direction1 = np.arctan2(target[1] - self.positions1[self.positions_index1-1][1], target[0] - self.positions1[self.positions_index1-1][0]) * 180/np.pi
-                self.aoa_direction1 -= self.current_ori1
+                self.aoa_direction1 -= self.current_ori1 * 180 / np.pi
 
             if self.within_threshold2:
                 self.aoa_direction2 = 1000.0
                 if self.first_pub2:
                     self.first_pub2 = False
-                    self.move_direction2 = np.arctan2(target[1] - self.positions2[self.positions_index2-1][1], target[0] - self.positions2[self.positions_index2-1][0]) * 1
-80/np.pi
-                    self.move_direction2 -= self.current_ori2
-                    pubt2 = rospy.Publisher(str(self.name_space2)+"within_threshold", Float32, queue_size=1)
+                    self.move_direction2 = np.arctan2(target[1] - self.positions2[self.positions_index2-1][1], target[0] - self.positions2[self.positions_index2-1][0]) * 180/np.pi
+                    self.move_direction2 -= self.current_ori2 * 180 / np.pi
                     pubt2.publish(self.aoa_direction2)
             else:
                 self.aoa_direction2 = np.arctan2(target[1] - self.positions2[self.positions_index2-1][1], target[0] - self.positions2[self.positions_index2-1][0]) * 180/np.pi
-                self.aoa_direction2 -= self.current_ori2
-            rospy.loginfo("AOA move direction 1: " + str(self.aoa_direction1))
-            rospy.loginfo("AOA move direction 2: " + str(self.aoa_direction2))
+                self.aoa_direction2 -= self.current_ori2 * 180 / np.pi
+            rospy.loginfo("AOA move directions: " + str([self.aoa_direction1, self.aoa_direction2]))
+            rospy.loginfo("Robot Locations: " + str([self.positions1[-1], self.positions2[-1]]))
+            rospy.loginfo("Robot Orientations: " + str([self.current_ori1 * 180 / np.pi, self.current_ori2 * 180 / np.pi]))
 
             pub1.publish(self.aoa_direction1)
             pub2.publish(self.aoa_direction2)
 
+            # Marker for target 1
+            p1 = Marker()
+            p1.header.frame_id = str(self.name_space1)+"map"
+            p1.type = p1.CUBE
+            p1.action = 0
+            p1.scale.x = 0.2
+            p1.scale.y = 0.2
+            p1.scale.z = 0.2
+            p1.color.a = 255
+            p1.color.r = 0
+            p1.color.g = 255
+            p1.color.b = 0
+            p1.pose.orientation.w = 1.0
+            p1.pose.position.x = target[0] - self.start_position1[0]
+            p1.pose.position.y = target[1] - self.start_position1[1]
+            p1.pose.position.z = 0.0
+
+            # Marker for target 2
+            p2 = Marker()
+            p2.header.frame_id = str(self.name_space2)+"map"
+            p2.type = p2.CUBE
+            p2.action = p2.ADD
+            p2.scale.x = 0.2
+            p2.scale.y = 0.2
+            p2.scale.z = 0.2
+            p2.color.a = 255
+            p2.color.r = 0
+            p2.color.g = 255
+            p2.color.b = 0
+            p2.pose.orientation.w = 1.0
+            p2.pose.position.x = target[0] - self.start_position2[0]
+            p2.pose.position.y = target[1] - self.start_position2[1]
+            p2.pose.position.z = 0.0
+            self.target1 = p1
+            self.target2 = p2
+
+            pub_target1.publish(p1)
+            pub_target2.publish(p2)
 
 
     def target_optim(self, iterations=1000):
@@ -279,9 +327,9 @@ class AOA_Processor:
             t2 = 0.1 * self.cost_function1.x + 0.9 * self.cost_function2.x
             self.cost_function1.x = t1
             self.cost_function2.x = t2
-        
+
         return 0.5*self.cost_function1.x + 0.5*self.cost_function2.x
-            
+
 
 if __name__=='__main__':
     obj = AOA_Processor()

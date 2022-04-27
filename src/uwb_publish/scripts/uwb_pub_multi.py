@@ -83,8 +83,8 @@ class UWB_meas:
                 for line in data.decode("utf-8").split("\r\n"):
                     m = re.match(r"d\w\w: (\d+\.\d+) d\w\w:(\d+\.\d+)", line)
                     if m is not None:
-                        first_val.append(float(m[1]))
-                        second_val.append(float(m[2]))
+                        first_val.append(float(m.group(1)))
+                        second_val.append(float(m.group(2)))
                     else:
                         continue
 

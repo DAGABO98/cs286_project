@@ -110,6 +110,11 @@ void Explore::visualizeFrontiers(
   green.g = 1.0;
   green.b = 0;
   green.a = 1.0;
+  std_msgs::ColorRGBA yellow;
+  green.r = 0.5;
+  green.g = 0.5;
+  green.b = 0;
+  green.a = 1.0;
 
   ROS_DEBUG("visualising %lu frontiers", frontiers.size());
   visualization_msgs::MarkerArray markers_msg;
@@ -135,6 +140,7 @@ void Explore::visualizeFrontiers(
 
   m.action = visualization_msgs::Marker::ADD;
   size_t id = 0;
+  int id_yellow = 0;
   for (auto& frontier : frontiers) {
     m.type = visualization_msgs::Marker::POINTS;
     m.id = int(id);
@@ -143,7 +149,7 @@ void Explore::visualizeFrontiers(
     m.scale.y = 0.1;
     m.scale.z = 0.1;
     m.points = frontier.points;
-    if (goalOnBlacklist(frontier.centroid)) {
+    if (goalOnBlacklist(frontier.centroid)) { // centroid
       m.color = red;
     } else {
       m.color = blue;
@@ -152,14 +158,20 @@ void Explore::visualizeFrontiers(
     ++id;
     m.type = visualization_msgs::Marker::SPHERE;
     m.id = int(id);
-    m.pose.position = frontier.initial;
+    m.pose.position = frontier.centroid; // initial
     // scale frontier according to its cost (costier frontiers will be smaller)
     double scale = std::min(std::abs(min_cost * 0.4 / frontier.cost), 0.5);
     m.scale.x = scale;
     m.scale.y = scale;
     m.scale.z = scale;
     m.points = {};
-    m.color = green;
+    if (id_yellow==0) {
+      m.color = yellow;
+      id_yellow++;
+      ROS_INFO("Yello!");
+    } else {
+      m.color = green;
+    }
     markers.push_back(m);
     ++id;
   }
@@ -201,14 +213,31 @@ void Explore::makePlan()
   auto frontier =
       std::find_if_not(frontiers.begin(), frontiers.end(),
                        [this](const frontier_exploration::Frontier& f) {
-                         return goalOnBlacklist(f.centroid);
+                         return goalOnBlacklist(f.centroid); // centroid
                        });
   if (frontier == frontiers.end()) {
     stop();
     return;
   }
-  geometry_msgs::Point target_position = frontier->centroid;
 
+  geometry_msgs::Point target_position = frontier->centroid; //centroid
+
+  /*
+  This is where we add our code.
+  
+  costmap_2d::Costmap2D* costmap2d = costmap_client_.getCostmap();
+  ros::NodeHandle optimized_target_nh;
+  std::string optimized_target_topic = "optimized_target_topic";
+  auto optimized_target_msg = ros::topic::waitForMessage<geometry_msgs::Point>(optimized_target_topic, optimized_target_nh);
+  geometry_msgs::Point optimized_target = *optimized_target_msg;
+  unsigned int mx, my;
+  if (!costmap2d->worldToMap(optimized_target.x, optimized_target.y, mx, my)) {
+    ROS_INFO("target is inside the map");
+    target_position = optimized_target;
+  }
+
+
+  */
   // time out if we are not making any progress
   bool same_goal = prev_goal_ == target_position;
   prev_goal_ = target_position;
