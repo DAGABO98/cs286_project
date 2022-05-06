@@ -1,12 +1,12 @@
 # cs286_project
 
 ## Overview
-This repo contains the code for biased frontier exploration leveraging UWB information to traingulate the location of a target. Frontiers will be chosen based on the frontier that is closer to the general direction of the target. Our implementation relies on the following packages:
+This repo contains the code for biased frontier exploration leveraging UWB information to triangulate the location of a target. Frontiers will be chosen based on the frontier that is closer to the general direction of the target. Our implementation relies on the following packages:
  - explore_lite (http://wiki.ros.org/explore_lite)
  - ROS navigation stack (https://github.com/ros-planning/navigation)
  - turtlebot3_simulations (http://wiki.ros.org/turtlebot3_simulations)
  - tb3_navigations (https://github.com/hsrwrobotics/tb3_navigations)
- All these packages have been included inside the repo for the user's convenience. Packages that have a "_1" attached to the end of their folder have been modified to provide additional functionality. For instance, the explore-lite package has been modified to bias frontier in the direction of the target, and tb3_navigations has been modified to allow for multiple robots to be spawn using a single launch file. For this project, we also created a package (`uwb_publish`) and a script (`uwb_sim.py`) to control the UWB sensors, and two scripts for the traingulation of the target (`proximity_process.py` and `proximity_process_sim.py`).
+ All these packages have been included inside the repo for the user's convenience. Packages that have a "_1" attached to the end of their folder have been modified to provide additional functionality. For instance, the explore-lite package has been modified to bias frontier in the direction of the target, and tb3_navigations has been modified to allow for multiple robots to be spawn using a single launch file. For this project, we also created a package (`uwb_publish`) and a script (`uwb_sim.py`) to control the UWB sensors, and two scripts for the triangulation of the target (`proximity_process.py` and `proximity_process_sim.py`).
  
  ## Important Note
  This project was developed for ROS Melodic and it is approximately self-contained, having most of the needed packages already in the repo. However, depending on your system, you might need to resolve dependency issues before running the code. To check which dependencies haven't been satisfied just run `catkin_make` inside the cs286_project folder and follow the instructions to install the missing packages.
