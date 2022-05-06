@@ -114,7 +114,7 @@ std::vector<Frontier> FrontierSearch::searchFrom(geometry_msgs::Point position, 
 
     ROS_DEBUG("Similarity is %lf", similarity);
 
-    frontier.cost = frontierCost(frontier) - similarity * 8;
+    frontier.cost = frontierCost(frontier) - (similarity * 8);
   }
   std::sort(
       frontier_list.begin(), frontier_list.end(),
