@@ -1,4 +1,4 @@
-# cs286_project
+# Biased Frontier Navigation
 
 ## Overview
 This repo contains the code for biased frontier exploration leveraging UWB information to triangulate the location of a target. Frontiers will be chosen based on the frontier that is closer to the general direction of the target. Our implementation relies on the following packages:
